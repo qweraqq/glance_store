@@ -1,5 +1,17 @@
 # Copyright 2016 Shanghai Jiaotong University MSS.
 # All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
 
 
 """Storage backend for Blue Ocean storage system"""
@@ -24,36 +36,30 @@ import glance_store.location
 LOG = logging.getLogger(__name__)
 
 DEFAULT_ADDR = 'localhost'
-DEFAULT_PORT = 7000
 DEFAULT_CHUNKSIZE = 64  # in MiB
 
-_SHEEPDOG_OPTS = [
-    cfg.IntOpt('sheepdog_store_chunk_size', default=DEFAULT_CHUNKSIZE,
+_BOSS_OPTS = [
+    cfg.IntOpt('boss_store_chunk_size', default=DEFAULT_CHUNKSIZE,
                help=_('Images will be chunked into objects of this size '
                       '(in megabytes). For best performance, this should be '
                       'a power of two.')),
-    cfg.IntOpt('sheepdog_store_port', default=DEFAULT_PORT,
-               help=_('Port of sheep daemon.')),
-    cfg.StrOpt('sheepdog_store_address', default=DEFAULT_ADDR,
+    cfg.StrOpt('boss_store_address', default=DEFAULT_ADDR,
                help=_('IP address of sheep daemon.'))
 ]
 
 
-class SheepdogImage(object):
-    """Class describing an image stored in Sheepdog storage."""
+class BOSSImage(object):
+    """Class describing an image stored in BOSS storage."""
 
-    def __init__(self, addr, port, name, chunk_size):
+    def __init__(self, addr, name, chunk_size):
         self.addr = addr
-        self.port = port
         self.name = name
         self.chunk_size = chunk_size
 
     def _run_command(self, command, data, *params):
-        cmd = ("collie vdi %(command)s -a %(addr)s -p %(port)d %(name)s "
+        cmd = ("boss %(command)s -a d %(name)s "
                "%(params)s" %
                {"command": command,
-                "addr": self.addr,
-                "port": self.port,
                 "name": self.name,
                 "params": " ".join(map(str, params))})
 
@@ -68,7 +74,7 @@ class SheepdogImage(object):
         """
         Return the size of the this image
 
-        Sheepdog Usage: collie vdi list -r -a address -p port image
+        boss Usage: collie vdi list -r -a address -p port image
         """
         out = self._run_command("list -r", None)
         return int(out.split(' ')[3])
@@ -78,7 +84,7 @@ class SheepdogImage(object):
         Read up to 'count' bytes from this image starting at 'offset' and
         return the data.
 
-        Sheepdog Usage: collie vdi read -a address -p port image offset len
+        boss Usage: collie vdi read -a address -p port image offset len
         """
         return self._run_command("read", None, str(offset), str(count))
 
@@ -87,38 +93,38 @@ class SheepdogImage(object):
         Write up to 'count' bytes from the data to this image starting at
         'offset'
 
-        Sheepdog Usage: collie vdi write -a address -p port image offset len
+        boss Usage: collie vdi write -a address -p port image offset len
         """
         self._run_command("write", data, str(offset), str(count))
 
     def create(self, size):
         """
-        Create this image in the Sheepdog cluster with size 'size'.
+        Create this image in the boss cluster with size 'size'.
 
-        Sheepdog Usage: collie vdi create -a address -p port image size
+        boss Usage: collie vdi create -a address -p port image size
         """
         self._run_command("create", None, str(size))
 
     def resize(self, size):
-        """Resize this image in the Sheepdog cluster with size 'size'.
+        """Resize this image in the boss cluster with size 'size'.
 
-        Sheepdog Usage: collie vdi create -a address -p port image size
+        boss Usage: collie vdi create -a address -p port image size
         """
         self._run_command("resize", None, str(size))
 
     def delete(self):
         """
-        Delete this image in the Sheepdog cluster
+        Delete this image in the boss cluster
 
-        Sheepdog Usage: collie vdi delete -a address -p port image
+        boss Usage: collie vdi delete -a address -p port image
         """
         self._run_command("delete", None)
 
     def exist(self):
         """
-        Check if this image exists in the Sheepdog cluster via 'list' command
+        Check if this image exists in the boss cluster via 'list' command
 
-        Sheepdog Usage: collie vdi list -r -a address -p port image
+        boss Usage: collie vdi list -r -a address -p port image
         """
         out = self._run_command("list -r", None)
         if not out:
@@ -131,36 +137,32 @@ class StoreLocation(glance_store.location.StoreLocation):
     """
     Class describing a BOSS URI. This is of the form:
 
-        BOSS://addr:port:image # to do
+        BOSS://addr:image # to do
 
     """
 
     def process_specs(self):
         self.image = self.specs.get('image')
         self.addr = self.specs.get('addr')
-        self.port = self.specs.get('port')
 
     def get_uri(self):
-        return "sheepdog://%(addr)s:%(port)d:%(image)s" % {
+        return "BOSS://%(addr)s:%(image)s" % {
             'addr': self.addr,
-            'port': self.port,
             'image': self.image}
 
     def parse_uri(self, uri):
-        valid_schema = 'sheepdog://'
+        valid_schema = 'BOSS://'
         if not uri.startswith(valid_schema):
             reason = _("URI must start with '%s'") % valid_schema
             raise exceptions.BadStoreUri(message=reason)
         pieces = uri[len(valid_schema):].split(':')
-        if len(pieces) == 3:
-            self.image = pieces[2]
-            self.port = int(pieces[1])
+        if len(pieces) == 2:
+            self.image = pieces[1]
             self.addr = pieces[0]
         # This is used for backwards compatibility.
         else:
             self.image = pieces[0]
-            self.port = self.conf.glance_store.sheepdog_store_port
-            self.addr = self.conf.glance_store.sheepdog_store_address
+            self.addr = self.conf.glance_store.boss_store_address
 
 
 class ImageIterator(object):
@@ -188,11 +190,11 @@ class Store(glance_store.driver.Store):
     # What CAP does BOSS supply
     _CAPABILITIES = (capabilities.BitMasks.RW_ACCESS |
                      capabilities.BitMasks.DRIVER_REUSABLE)
-    OPTIONS = _SHEEPDOG_OPTS
-    EXAMPLE_URL = "sheepdog://addr:port:image"  ##To do
+    OPTIONS = _BOSS_OPTS
+    EXAMPLE_URL = "BOSS://addr:image"  ##To do
 
     def get_schemes(self):
-        return ('sheepdog',)
+        return ('BOSS',)
 
     def configure_add(self):
         """
@@ -203,25 +205,23 @@ class Store(glance_store.driver.Store):
         """
 
         try:
-            chunk_size = self.conf.glance_store.sheepdog_store_chunk_size
+            chunk_size = self.conf.glance_store.boss_store_chunk_size
             self.chunk_size = chunk_size * units.Mi
             self.READ_CHUNKSIZE = self.chunk_size
             self.WRITE_CHUNKSIZE = self.READ_CHUNKSIZE
-
-            self.addr = self.conf.glance_store.sheepdog_store_address
-            self.port = self.conf.glance_store.sheepdog_store_port
+            self.addr = self.conf.glance_store.boss_store_address
         except cfg.ConfigFileValueError as e:
             reason = _("Error in store configuration: %s") % e
             LOG.error(reason)
-            raise exceptions.BadStoreConfiguration(store_name='sheepdog',
+            raise exceptions.BadStoreConfiguration(store_name='BOSS',
                                                    reason=reason)
 
         try:
-            processutils.execute("collie", shell=True)
+            processutils.execute("BOSS", shell=True)
         except processutils.ProcessExecutionError as exc:
             reason = _("Error in store configuration: %s") % exc
             LOG.error(reason)
-            raise exceptions.BadStoreConfiguration(store_name='sheepdog',
+            raise exceptions.BadStoreConfiguration(store_name='BOSS',
                                                    reason=reason)
 
     @capabilities.check
@@ -237,10 +237,10 @@ class Store(glance_store.driver.Store):
         """
 
         loc = location.store_location
-        image = SheepdogImage(loc.addr, loc.port, loc.image,
+        image = BOSSImage(loc.addr, loc.port, loc.image,
                               self.READ_CHUNKSIZE)
         if not image.exist():
-            raise exceptions.NotFound(_("Sheepdog image %s does not exist")
+            raise exceptions.NotFound(_("boss image %s does not exist")
                                       % image.name)
         return (ImageIterator(image), image.get_size())
 
@@ -256,10 +256,9 @@ class Store(glance_store.driver.Store):
         """
 
         loc = location.store_location
-        image = SheepdogImage(loc.addr, loc.port, loc.image,
-                              self.READ_CHUNKSIZE)
+        image = BOSSImage(loc.addr, loc.image, self.READ_CHUNKSIZE)
         if not image.exist():
-            raise exceptions.NotFound(_("Sheepdog image %s does not exist")
+            raise exceptions.NotFound(_("boss image %s does not exist")
                                       % image.name)
         return image.get_size()
 
@@ -281,10 +280,10 @@ class Store(glance_store.driver.Store):
                 existed
         """
 
-        image = SheepdogImage(self.addr, self.port, image_id,
+        image = BOSSImage(self.addr, self.port, image_id,
                               self.WRITE_CHUNKSIZE)
         if image.exist():
-            raise exceptions.Duplicate(_("Sheepdog image %s already exists")
+            raise exceptions.Duplicate(_("boss image %s already exists")
                                        % image_id)
 
         location = StoreLocation({
@@ -333,9 +332,9 @@ class Store(glance_store.driver.Store):
         """
 
         loc = location.store_location
-        image = SheepdogImage(loc.addr, loc.port, loc.image,
-                              self.WRITE_CHUNKSIZE)
+        image = BOSSImage(loc.addr, loc.port, loc.image,
+                          self.WRITE_CHUNKSIZE)
+
         if not image.exist():
-            raise exceptions.NotFound(_("Sheepdog image %s does not exist") %
-                                      loc.image)
+            raise exceptions.NotFound(_("boss image %s does not exist") %loc.image)
         image.delete()
