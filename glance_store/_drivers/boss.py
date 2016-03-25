@@ -238,8 +238,7 @@ class Store(glance_store.driver.Store):
         """
 
         loc = location.store_location
-        image = BOSSImage(loc.addr, loc.port, loc.image,
-                              self.READ_CHUNKSIZE)
+        image = BOSSImage(loc.addr, loc.image, self.READ_CHUNKSIZE)
         if not image.exist():
             raise exceptions.NotFound(_("boss image %s does not exist")
                                       % image.name)
@@ -281,8 +280,7 @@ class Store(glance_store.driver.Store):
                 existed
         """
 
-        image = BOSSImage(self.addr, self.port, image_id,
-                              self.WRITE_CHUNKSIZE)
+        image = BOSSImage(self.addr, image_id, self.WRITE_CHUNKSIZE)
         if image.exist():
             raise exceptions.Duplicate(_("boss image %s already exists")
                                        % image_id)
@@ -290,7 +288,6 @@ class Store(glance_store.driver.Store):
         location = StoreLocation({
             'image': image_id,
             'addr': self.addr,
-            'port': self.port
         }, self.conf)
 
         image.create(image_size)
@@ -333,9 +330,8 @@ class Store(glance_store.driver.Store):
         """
 
         loc = location.store_location
-        image = BOSSImage(loc.addr, loc.port, loc.image,
-                          self.WRITE_CHUNKSIZE)
+        image = BOSSImage(loc.addr, loc.image, self.WRITE_CHUNKSIZE)
 
         if not image.exist():
-            raise exceptions.NotFound(_("boss image %s does not exist") %loc.image)
+            raise exceptions.NotFound(_("boss image %s does not exist") % loc.image)
         image.delete()
