@@ -31,12 +31,12 @@ import glance_store.driver
 from glance_store import exceptions
 from glance_store.i18n import _
 import glance_store.location
-
+import tempfile  # for test
 
 LOG = logging.getLogger(__name__)
 
 DEFAULT_ADDR = 'localhost'
-DEFAULT_CHUNKSIZE = 64  # in MiB
+DEFAULT_CHUNKSIZE = 4  # in MiB
 
 _BOSS_OPTS = [
     cfg.IntOpt('boss_store_chunk_size', default=DEFAULT_CHUNKSIZE,
@@ -57,8 +57,13 @@ class BOSSImage(object):
         self.chunk_size = chunk_size
 
     def _run_command(self, command, data, *params):
-        cmd = ("boss %(command)s --addr=%(addr)s --image=%(name)s "
-               "%(params)s" %
+        # cmd = ("boss %(command)s --addr=%(addr)s --image=%(name)s "
+        #        "%(params)s" %
+        #        {"command": command,
+        #         "addr": self.addr,
+        #         "name": self.name,
+        #         "params": " ".join(map(str, params))})
+        cmd = ("%(command)s%(addr)s/%(name)s %(params)s" %
                {"command": command,
                 "addr": self.addr,
                 "name": self.name,
@@ -78,63 +83,75 @@ class BOSSImage(object):
         """
         Return the size of the this image
 
-        boss Usage: collie vdi list -r -a address -p port image
+        boss Usage:
         """
-        out = self._run_command("list -r", None)
-        return int(out.split(' ')[3])
+        # out = self._run_command("list -r", None)
+        out = self._run_command("du ", None)
+        return int(out.split()[0])
 
     def read(self, offset, count):
         """
         Read up to 'count' bytes from this image starting at 'offset' and
         return the data.
 
-        boss Usage: collie vdi read -a address -p port image offset len
+        boss Usage:
         """
-        return self._run_command("read", None, str(offset), str(count))
+        # return self._run_command("read", None, str(offset), str(count))
+        out = self._run_command("head ", None)
+        return out
 
     def write(self, data, offset, count):
         """
         Write up to 'count' bytes from the data to this image starting at
         'offset'
 
-        boss Usage: collie vdi write -a address -p port image offset len
+        boss Usage:
         """
-        self._run_command("write", data, str(offset), str(count))
+        # self._run_command("write", data, str(offset), str(count))
+
+        self._run_command("dd of=", None, "bs=" + str(self.chunk_size) + 'M',
+                          "count="+str(count), "skip="+str(offset),
+                          'conv=notrunc', "if="+data)
 
     def create(self, size):
         """
         Create this image in the boss cluster with size 'size'.
 
-        boss Usage: collie vdi create -a address -p port image size
+        boss Usage:
         """
-        self._run_command("create", None, str(size))
+        # self._run_command("create", None, str(size))
+        self._run_command("dd of=", None, "bs="+str(self.chunk_size)+'M',
+                          "count="+str(size), "if=/dev/zero")
 
     def resize(self, size):
         """Resize this image in the boss cluster with size 'size'.
 
-        boss Usage: collie vdi create -a address -p port image size
+        boss Usage: Actually expand by size?
+        dd   oflag=append  conv=notrunc  if=/dev/zero  of=/newfile   bs=1MB count=100
         """
-        self._run_command("resize", None, str(size))
+        self._run_command("dd of=", None, "bs="+str(self.chunk_size)+'M',
+                          "count="+str(size), "if=/dev/zero", 'oflag=append',
+                          'conv=notrunc')
 
     def delete(self):
         """
         Delete this image in the boss cluster
 
-        boss Usage: collie vdi delete -a address -p port image
+        boss Usage:
         """
-        self._run_command("delete", None)
+        self._run_command("rm -f ", None)
 
     def exist(self):
         """
         Check if this image exists in the boss cluster via 'list' command
 
-        boss Usage: collie vdi list -r -a address -p port image
+        boss Usage:
         """
-        out = self._run_command("list -r", None)
-        if not out:
+        try:
+            out = self._run_command("ls ", None)
+        except Exception as exc:
             return False
-        else:
-            return True
+        return True
 
 
 class StoreLocation(glance_store.location.StoreLocation):
@@ -338,3 +355,16 @@ class Store(glance_store.driver.Store):
         if not image.exist():
             raise exceptions.NotFound(_("boss image %s does not exist") % loc.image)
         image.delete()
+
+if __name__ == '__main__':
+    image = BOSSImage('/home/shen/boss', 'ie4t23tg-4t32-fa3', DEFAULT_CHUNKSIZE)
+    image.create(2)  # size of bytes
+    image.resize(1)  # actually expand
+    print image.get_size()
+    image.write('/home/shen/boss/tmp.txt', 0, 1)
+    print image.read(0, 1)
+    print image.exist()
+    # image.delete()
+    print image.exist()
+    # for i in range(10):
+    #     image.write('d'*10, i*10, 10)
