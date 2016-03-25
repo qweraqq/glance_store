@@ -57,9 +57,10 @@ class BOSSImage(object):
         self.chunk_size = chunk_size
 
     def _run_command(self, command, data, *params):
-        cmd = ("boss %(command)s -a d %(name)s "
+        cmd = ("boss %(command)s --addr=%(addr)s --image=%(name)s "
                "%(params)s" %
                {"command": command,
+                "addr": self.addr,
                 "name": self.name,
                 "params": " ".join(map(str, params))})
 
