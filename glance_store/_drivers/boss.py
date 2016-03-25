@@ -69,6 +69,9 @@ class BOSSImage(object):
                 cmd, process_input=data, shell=True)[0]
         except processutils.ProcessExecutionError as exc:
             LOG.error(exc)
+            # exc.exit_code
+            # exc.stdout
+            # exc.stderr
             raise glance_store.BackendException(exc)
 
     def get_size(self):
