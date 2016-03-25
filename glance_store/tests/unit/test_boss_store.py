@@ -53,15 +53,14 @@ class TestBOSSImage(oslotest.base.BaseTestCase):
     @mock.patch.object(processutils, 'execute')
     def test_run_command(self, mock_execute):
         image = boss.BOSSImage(
-            '127.0.0.1', 7000, '6bd59e6e-c410-11e5-ab67-0a73f1fda51b',
+            '127.0.0.1', '6bd59e6e-c410-11e5-ab67-0a73f1fda51b',
             boss.DEFAULT_CHUNKSIZE,
         )
         image._run_command('create', None)
-        expected_cmd = ('collie vdi %(command)s'
-                        ' -a %(addr)s -p %(port)d %(name)s ') % {
+        expected_cmd = ('boss %(command)s'
+                        ' --addr=%(addr)s --image=%(name)s ') % {
             'command': 'create',
             'addr': '127.0.0.1',
-            'port': 7000,
             'name': '6bd59e6e-c410-11e5-ab67-0a73f1fda51b',
         }
         actual_cmd = mock_execute.call_args[0][0]
